@@ -17,12 +17,14 @@
  * instruction set this cpu supports.
  */
 #define ELF_HWCAP		(elf_hwcap)
+#define ELF_HWCAP2		(elf_hwcap2)
 
 enum {
 	CAP_HWCAP = 1,
 };
 
 extern unsigned long elf_hwcap;
+extern unsigned long elf_hwcap2;
 
 #define RISCV_ISA_EXT_a		('a' - 'a')
 #define RISCV_ISA_EXT_c		('c' - 'a')

@@ -17,6 +17,7 @@
 #define NUM_ALPHA_EXTS ('z' - 'a' + 1)
 
 unsigned long elf_hwcap __read_mostly;
+unsigned long elf_hwcap2 __read_mostly;
 
 /* Host ISA bitmap */
 static DECLARE_BITMAP(riscv_isa, RISCV_ISA_EXT_MAX) __read_mostly;
@@ -68,21 +69,39 @@ void __init riscv_fill_hwcap(void)
 	const char *isa;
 	char print_str[NUM_ALPHA_EXTS + 1];
 	int i, j;
-	static unsigned long isa2hwcap[256] = {0};
+	static unsigned long isa2hwcap[RISCV_ISA_EXT_MAX] = {0};
 
-	isa2hwcap['i'] = isa2hwcap['I'] = COMPAT_HWCAP_ISA_I;
-	isa2hwcap['m'] = isa2hwcap['M'] = COMPAT_HWCAP_ISA_M;
-	isa2hwcap['a'] = isa2hwcap['A'] = COMPAT_HWCAP_ISA_A;
-	isa2hwcap['f'] = isa2hwcap['F'] = COMPAT_HWCAP_ISA_F;
-	isa2hwcap['d'] = isa2hwcap['D'] = COMPAT_HWCAP_ISA_D;
-	isa2hwcap['c'] = isa2hwcap['C'] = COMPAT_HWCAP_ISA_C;
+	/* HWCAP */
+	isa2hwcap[RISCV_ISA_EXT_i] = COMPAT_HWCAP_ISA_I;
+	isa2hwcap[RISCV_ISA_EXT_m] = COMPAT_HWCAP_ISA_M;
+	isa2hwcap[RISCV_ISA_EXT_a] = COMPAT_HWCAP_ISA_A;
+	isa2hwcap[RISCV_ISA_EXT_f] = COMPAT_HWCAP_ISA_F;
+	isa2hwcap[RISCV_ISA_EXT_d] = COMPAT_HWCAP_ISA_D;
+	isa2hwcap[RISCV_ISA_EXT_c] = COMPAT_HWCAP_ISA_C;
+	/* HWCAP2 */
+	isa2hwcap[RISCV_ISA_EXT_ZBA  ] = COMPAT_HWCAP2_ISA_ZBA;
+	isa2hwcap[RISCV_ISA_EXT_ZBB  ] = COMPAT_HWCAP2_ISA_ZBB;
+	isa2hwcap[RISCV_ISA_EXT_ZBC  ] = COMPAT_HWCAP2_ISA_ZBC;
+	isa2hwcap[RISCV_ISA_EXT_ZBS  ] = COMPAT_HWCAP2_ISA_ZBS;
+	isa2hwcap[RISCV_ISA_EXT_ZBKB ] = COMPAT_HWCAP2_ISA_ZBKB;
+	isa2hwcap[RISCV_ISA_EXT_ZBKC ] = COMPAT_HWCAP2_ISA_ZBKC;
+	isa2hwcap[RISCV_ISA_EXT_ZBKX ] = COMPAT_HWCAP2_ISA_ZBKX;
+	isa2hwcap[RISCV_ISA_EXT_ZKNE ] = COMPAT_HWCAP2_ISA_ZKND;
+	isa2hwcap[RISCV_ISA_EXT_ZKND ] = COMPAT_HWCAP2_ISA_ZKNE;
+	isa2hwcap[RISCV_ISA_EXT_ZKNH ] = COMPAT_HWCAP2_ISA_ZKNH;
+	isa2hwcap[RISCV_ISA_EXT_ZKSED] = COMPAT_HWCAP2_ISA_ZKSED;
+	isa2hwcap[RISCV_ISA_EXT_ZKSH ] = COMPAT_HWCAP2_ISA_ZKSH;
+	isa2hwcap[RISCV_ISA_EXT_ZKR  ] = COMPAT_HWCAP2_ISA_ZKR;
+	isa2hwcap[RISCV_ISA_EXT_ZKT  ] = COMPAT_HWCAP2_ISA_ZKT;
 
 	elf_hwcap = 0;
+	elf_hwcap2 = 0;
 
 	bitmap_zero(riscv_isa, RISCV_ISA_EXT_MAX);
 
 	for_each_of_cpu_node(node) {
 		unsigned long this_hwcap = 0;
+		unsigned long this_hwcap2 = 0;
 		DECLARE_BITMAP(this_isa, RISCV_ISA_EXT_MAX);
 		const char *temp;
 
@@ -181,15 +200,17 @@ void __init riscv_fill_hwcap(void)
 #define SET_ISA_EXT_MAP(name, bit)						\
 			do {							\
 				if ((ext_end - ext == sizeof(name) - 1) &&	\
-				     !memcmp(ext, name, sizeof(name) - 1))	\
+				     !memcmp(ext, name, sizeof(name) - 1)) {	\
+					this_hwcap2 |= isa2hwcap[bit];		\
 					set_bit(bit, this_isa);			\
+				}						\
 			} while (false)						\
 
 			if (unlikely(ext_err))
 				continue;
 			if (!ext_long) {
-				this_hwcap |= isa2hwcap[(unsigned char)(*ext)];
-				set_bit(*ext - 'a', this_isa);
+				this_hwcap |= isa2hwcap[tolower(*ext) - 'a'];
+				set_bit(tolower(*ext) - 'a', this_isa);
 			} else {
 				SET_ISA_EXT_MAP("sscofpmf", RISCV_ISA_EXT_SSCOFPMF);
 				SET_ISA_EXT_MAP("zba"     , RISCV_ISA_EXT_ZBA     );
@@ -238,6 +259,11 @@ void __init riscv_fill_hwcap(void)
 			elf_hwcap &= this_hwcap;
 		else
 			elf_hwcap = this_hwcap;
+
+		if (elf_hwcap2)
+			elf_hwcap2 &= this_hwcap2;
+		else
+			elf_hwcap2 = this_hwcap2;
 
 		if (bitmap_weight(riscv_isa, RISCV_ISA_EXT_MAX))
 			bitmap_and(riscv_isa, riscv_isa, this_isa, RISCV_ISA_EXT_MAX);

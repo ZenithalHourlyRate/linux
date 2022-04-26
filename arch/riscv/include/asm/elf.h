@@ -51,7 +51,9 @@
  * but it's not easy, and we've already done it here.
  */
 #define ELF_HWCAP	(elf_hwcap)
+#define ELF_HWCAP2	(elf_hwcap2)
 extern unsigned long elf_hwcap;
+extern unsigned long elf_hwcap2;
 
 /*
  * This yields a string that ld.so will use to load implementation
