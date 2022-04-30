@@ -192,6 +192,39 @@ void __init riscv_fill_hwcap(void)
 				set_bit(*ext - 'a', this_isa);
 			} else {
 				SET_ISA_EXT_MAP("sscofpmf", RISCV_ISA_EXT_SSCOFPMF);
+				SET_ISA_EXT_MAP("zba"     , RISCV_ISA_EXT_ZBA     );
+				SET_ISA_EXT_MAP("zbb"     , RISCV_ISA_EXT_ZBB     );
+				SET_ISA_EXT_MAP("zbc"     , RISCV_ISA_EXT_ZBC     );
+				SET_ISA_EXT_MAP("zbs"     , RISCV_ISA_EXT_ZBS     );
+				SET_ISA_EXT_MAP("zbkb"    , RISCV_ISA_EXT_ZBKB    );
+				SET_ISA_EXT_MAP("zbkc"    , RISCV_ISA_EXT_ZBKC    );
+				SET_ISA_EXT_MAP("zbks"    , RISCV_ISA_EXT_ZBKX    );
+				SET_ISA_EXT_MAP("zknd"    , RISCV_ISA_EXT_ZKND    );
+				SET_ISA_EXT_MAP("zkne"    , RISCV_ISA_EXT_ZKNE    );
+				SET_ISA_EXT_MAP("zknh"    , RISCV_ISA_EXT_ZKNH    );
+				SET_ISA_EXT_MAP("zksed"   , RISCV_ISA_EXT_ZKSED   );
+				SET_ISA_EXT_MAP("zksh"    , RISCV_ISA_EXT_ZKSH    );
+				SET_ISA_EXT_MAP("zkr"     , RISCV_ISA_EXT_ZKR     );
+				SET_ISA_EXT_MAP("zkt"     , RISCV_ISA_EXT_ZKT     );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZBKB    );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZBKC    );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZBKX    );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZKND    );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZKNE    );
+				SET_ISA_EXT_MAP("zkn"     , RISCV_ISA_EXT_ZKNH    );
+				SET_ISA_EXT_MAP("zks"     , RISCV_ISA_EXT_ZBKB    );
+				SET_ISA_EXT_MAP("zks"     , RISCV_ISA_EXT_ZBKC    );
+				SET_ISA_EXT_MAP("zks"     , RISCV_ISA_EXT_ZBKX    );
+				SET_ISA_EXT_MAP("zks"     , RISCV_ISA_EXT_ZKSED   );
+				SET_ISA_EXT_MAP("zks"     , RISCV_ISA_EXT_ZKSH    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZBKB    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZBKC    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZBKX    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZKND    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZKNE    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZKNH    );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZKR     );
+				SET_ISA_EXT_MAP("zk"      , RISCV_ISA_EXT_ZKT     );
 			}
 #undef SET_ISA_EXT_MAP
 		}
