@@ -578,7 +578,7 @@ void bpf_map_free_kptrs(struct bpf_map *map, void *map_value)
 		if (off_desc->type == BPF_KPTR_UNREF) {
 			u64 *p = (u64 *)btf_id_ptr;
 
-			WRITE_ONCE(p, 0);
+			WRITE_ONCE(*p, 0);
 			continue;
 		}
 		old_ptr = xchg(btf_id_ptr, 0);
@@ -4361,7 +4361,9 @@ static int bpf_task_fd_query(const union bpf_attr *attr,
 	if (attr->task_fd_query.flags != 0)
 		return -EINVAL;
 
+	rcu_read_lock();
 	task = get_pid_task(find_vpid(pid), PIDTYPE_PID);
+	rcu_read_unlock();
 	if (!task)
 		return -ENOENT;
 
@@ -5035,9 +5037,6 @@ static bool syscall_prog_is_valid_access(int off, int size,
 
 BPF_CALL_3(bpf_sys_bpf, int, cmd, union bpf_attr *, attr, u32, attr_size)
 {
-	struct bpf_prog * __maybe_unused prog;
-	struct bpf_tramp_run_ctx __maybe_unused run_ctx;
-
 	switch (cmd) {
 	case BPF_MAP_CREATE:
 	case BPF_MAP_UPDATE_ELEM:
@@ -5047,6 +5046,18 @@ BPF_CALL_3(bpf_sys_bpf, int, cmd, union bpf_attr *, attr, u32, attr_size)
 	case BPF_LINK_CREATE:
 	case BPF_RAW_TRACEPOINT_OPEN:
 		break;
+	default:
+		return -EINVAL;
+	}
+	return __sys_bpf(cmd, KERNEL_BPFPTR(attr), attr_size);
+}
+
+int kern_sys_bpf(int cmd, union bpf_attr *attr, unsigned int size)
+{
+	struct bpf_prog * __maybe_unused prog;
+	struct bpf_tramp_run_ctx __maybe_unused run_ctx;
+
+	switch (cmd) {
 #ifdef CONFIG_BPF_JIT /* __bpf_prog_enter_sleepable used by trampoline and JIT */
 	case BPF_PROG_TEST_RUN:
 		if (attr->test.data_in || attr->test.data_out ||
@@ -5077,11 +5088,10 @@ BPF_CALL_3(bpf_sys_bpf, int, cmd, union bpf_attr *, attr, u32, attr_size)
 		return 0;
 #endif
 	default:
-		return -EINVAL;
+		return ____bpf_sys_bpf(cmd, attr, size);
 	}
-	return __sys_bpf(cmd, KERNEL_BPFPTR(attr), attr_size);
 }
-EXPORT_SYMBOL(bpf_sys_bpf);
+EXPORT_SYMBOL(kern_sys_bpf);
 
 static const struct bpf_func_proto bpf_sys_bpf_proto = {
 	.func		= bpf_sys_bpf,
@@ -5130,7 +5140,7 @@ BPF_CALL_4(bpf_kallsyms_lookup_name, const char *, name, int, name_sz, int, flag
 	return *res ? 0 : -ENOENT;
 }
 
-const struct bpf_func_proto bpf_kallsyms_lookup_name_proto = {
+static const struct bpf_func_proto bpf_kallsyms_lookup_name_proto = {
 	.func		= bpf_kallsyms_lookup_name,
 	.gpl_only	= false,
 	.ret_type	= RET_INTEGER,
@@ -5145,7 +5155,7 @@ syscall_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	case BPF_FUNC_sys_bpf:
-		return &bpf_sys_bpf_proto;
+		return !perfmon_capable() ? NULL : &bpf_sys_bpf_proto;
 	case BPF_FUNC_btf_find_by_name_kind:
 		return &bpf_btf_find_by_name_kind_proto;
 	case BPF_FUNC_sys_close:

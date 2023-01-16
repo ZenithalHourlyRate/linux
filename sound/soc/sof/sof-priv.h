@@ -378,8 +378,8 @@ struct sof_ipc_fw_tracing_ops {
 
 /**
  * struct sof_ipc_pm_ops - IPC-specific PM ops
- * @ctx_save:		Function pointer for context save
- * @ctx_restore:	Function pointer for context restore
+ * @ctx_save:		Optional function pointer for context save
+ * @ctx_restore:	Optional function pointer for context restore
  */
 struct sof_ipc_pm_ops {
 	int (*ctx_save)(struct snd_sof_dev *sdev);
@@ -584,6 +584,10 @@ struct snd_sof_dev {
 
 	/* to protect the ipc_rx_handler_list  and  dsp_state_handler_list list */
 	struct mutex client_event_handler_mutex;
+
+	/* quirks to override topology values */
+	bool mclk_id_override;
+	u16  mclk_id_quirk; /* same size as in IPC3 definitions */
 
 	void *private;			/* core does not touch this */
 };

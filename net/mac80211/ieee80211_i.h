@@ -1077,7 +1077,7 @@ ieee80211_vif_get_shift(struct ieee80211_vif *vif)
 	int shift = 0;
 
 	rcu_read_lock();
-	chanctx_conf = rcu_dereference(vif->chanctx_conf);
+	chanctx_conf = rcu_dereference(vif->bss_conf.chanctx_conf);
 	if (chanctx_conf)
 		shift = ieee80211_chandef_get_shift(&chanctx_conf->def);
 	rcu_read_unlock();
@@ -1528,7 +1528,7 @@ ieee80211_get_sband(struct ieee80211_sub_if_data *sdata)
 	enum nl80211_band band;
 
 	rcu_read_lock();
-	chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
+	chanctx_conf = rcu_dereference(sdata->vif.bss_conf.chanctx_conf);
 
 	if (!chanctx_conf) {
 		rcu_read_unlock();
@@ -1640,6 +1640,14 @@ struct ieee802_11_elems {
 
 	/* whether a parse error occurred while retrieving these elements */
 	bool parse_error;
+
+	/*
+	 * scratch buffer that can be used for various element parsing related
+	 * tasks, e.g., element de-fragmentation etc.
+	 */
+	size_t scratch_len;
+	u8 *scratch_pos;
+	u8 scratch[];
 };
 
 static inline struct ieee80211_local *hw_to_local(
@@ -2225,7 +2233,7 @@ static inline void ieee80211_tx_skb_tid(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_chanctx_conf *chanctx_conf;
 
 	rcu_read_lock();
-	chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
+	chanctx_conf = rcu_dereference(sdata->vif.bss_conf.chanctx_conf);
 	if (WARN_ON(!chanctx_conf)) {
 		rcu_read_unlock();
 		kfree_skb(skb);

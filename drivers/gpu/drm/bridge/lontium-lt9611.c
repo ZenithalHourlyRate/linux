@@ -586,7 +586,7 @@ lt9611_connector_detect(struct drm_connector *connector, bool force)
 	int connected = 0;
 
 	regmap_read(lt9611->regmap, 0x825e, &reg_val);
-	connected  = (reg_val & BIT(0));
+	connected  = (reg_val & (BIT(2) | BIT(0)));
 
 	lt9611->status = connected ?  connector_status_connected :
 				connector_status_disconnected;
@@ -807,12 +807,13 @@ static int lt9611_connector_init(struct drm_bridge *bridge, struct lt9611 *lt961
 
 	drm_connector_helper_add(&lt9611->connector,
 				 &lt9611_bridge_connector_helper_funcs);
-	drm_connector_attach_encoder(&lt9611->connector, bridge->encoder);
 
 	if (!bridge->encoder) {
 		DRM_ERROR("Parent encoder object not found");
 		return -ENODEV;
 	}
+
+	drm_connector_attach_encoder(&lt9611->connector, bridge->encoder);
 
 	return 0;
 }

@@ -87,7 +87,7 @@
 
 #include <uapi/linux/io_uring.h>
 
-#include "internal.h"
+#include "../fs/internal.h"
 #include "io-wq.h"
 
 #define IORING_MAX_ENTRIES	32768
@@ -1110,230 +1110,12 @@ struct io_op_def {
 	unsigned		iopoll : 1;
 	/* size of async data needed, if any */
 	unsigned short		async_size;
+
+	int (*prep)(struct io_kiocb *, const struct io_uring_sqe *);
+	int (*issue)(struct io_kiocb *, unsigned int);
 };
 
-static const struct io_op_def io_op_defs[] = {
-	[IORING_OP_NOP] = {
-		.audit_skip		= 1,
-		.iopoll			= 1,
-	},
-	[IORING_OP_READV] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.buffer_select		= 1,
-		.needs_async_setup	= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_WRITEV] = {
-		.needs_file		= 1,
-		.hash_reg_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.needs_async_setup	= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_FSYNC] = {
-		.needs_file		= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_READ_FIXED] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_WRITE_FIXED] = {
-		.needs_file		= 1,
-		.hash_reg_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_POLL_ADD] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_POLL_REMOVE] = {
-		.audit_skip		= 1,
-	},
-	[IORING_OP_SYNC_FILE_RANGE] = {
-		.needs_file		= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_SENDMSG] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.needs_async_setup	= 1,
-		.ioprio			= 1,
-		.async_size		= sizeof(struct io_async_msghdr),
-	},
-	[IORING_OP_RECVMSG] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.buffer_select		= 1,
-		.needs_async_setup	= 1,
-		.ioprio			= 1,
-		.async_size		= sizeof(struct io_async_msghdr),
-	},
-	[IORING_OP_TIMEOUT] = {
-		.audit_skip		= 1,
-		.async_size		= sizeof(struct io_timeout_data),
-	},
-	[IORING_OP_TIMEOUT_REMOVE] = {
-		/* used by timeout updates' prep() */
-		.audit_skip		= 1,
-	},
-	[IORING_OP_ACCEPT] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.poll_exclusive		= 1,
-		.ioprio			= 1,	/* used for flags */
-	},
-	[IORING_OP_ASYNC_CANCEL] = {
-		.audit_skip		= 1,
-	},
-	[IORING_OP_LINK_TIMEOUT] = {
-		.audit_skip		= 1,
-		.async_size		= sizeof(struct io_timeout_data),
-	},
-	[IORING_OP_CONNECT] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.needs_async_setup	= 1,
-		.async_size		= sizeof(struct io_async_connect),
-	},
-	[IORING_OP_FALLOCATE] = {
-		.needs_file		= 1,
-	},
-	[IORING_OP_OPENAT] = {},
-	[IORING_OP_CLOSE] = {},
-	[IORING_OP_FILES_UPDATE] = {
-		.audit_skip		= 1,
-		.iopoll			= 1,
-	},
-	[IORING_OP_STATX] = {
-		.audit_skip		= 1,
-	},
-	[IORING_OP_READ] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.buffer_select		= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_WRITE] = {
-		.needs_file		= 1,
-		.hash_reg_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.plug			= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-		.iopoll			= 1,
-		.async_size		= sizeof(struct io_async_rw),
-	},
-	[IORING_OP_FADVISE] = {
-		.needs_file		= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_MADVISE] = {},
-	[IORING_OP_SEND] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollout		= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-	},
-	[IORING_OP_RECV] = {
-		.needs_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.pollin			= 1,
-		.buffer_select		= 1,
-		.audit_skip		= 1,
-		.ioprio			= 1,
-	},
-	[IORING_OP_OPENAT2] = {
-	},
-	[IORING_OP_EPOLL_CTL] = {
-		.unbound_nonreg_file	= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_SPLICE] = {
-		.needs_file		= 1,
-		.hash_reg_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_PROVIDE_BUFFERS] = {
-		.audit_skip		= 1,
-		.iopoll			= 1,
-	},
-	[IORING_OP_REMOVE_BUFFERS] = {
-		.audit_skip		= 1,
-		.iopoll			= 1,
-	},
-	[IORING_OP_TEE] = {
-		.needs_file		= 1,
-		.hash_reg_file		= 1,
-		.unbound_nonreg_file	= 1,
-		.audit_skip		= 1,
-	},
-	[IORING_OP_SHUTDOWN] = {
-		.needs_file		= 1,
-	},
-	[IORING_OP_RENAMEAT] = {},
-	[IORING_OP_UNLINKAT] = {},
-	[IORING_OP_MKDIRAT] = {},
-	[IORING_OP_SYMLINKAT] = {},
-	[IORING_OP_LINKAT] = {},
-	[IORING_OP_MSG_RING] = {
-		.needs_file		= 1,
-		.iopoll			= 1,
-	},
-	[IORING_OP_FSETXATTR] = {
-		.needs_file = 1
-	},
-	[IORING_OP_SETXATTR] = {},
-	[IORING_OP_FGETXATTR] = {
-		.needs_file = 1
-	},
-	[IORING_OP_GETXATTR] = {},
-	[IORING_OP_SOCKET] = {
-		.audit_skip		= 1,
-	},
-	[IORING_OP_URING_CMD] = {
-		.needs_file		= 1,
-		.plug			= 1,
-		.needs_async_setup	= 1,
-		.async_size		= uring_cmd_pdu_size(1),
-	},
-};
+static const struct io_op_def io_op_defs[];
 
 /* requests with any of those set should undergo io_disarm_next() */
 #define IO_DISARM_MASK (REQ_F_ARM_LTIMEOUT | REQ_F_LINK_TIMEOUT | REQ_F_FAIL)
@@ -1919,7 +1701,7 @@ static __cold struct io_ring_ctx *io_ring_ctx_alloc(struct io_uring_params *p)
 	ctx->dummy_ubuf->ubuf = -1UL;
 
 	if (percpu_ref_init(&ctx->refs, io_ring_ctx_ref_free,
-			    PERCPU_REF_ALLOW_REINIT, GFP_KERNEL))
+			    0, GFP_KERNEL))
 		goto err;
 
 	ctx->flags = p->flags;
@@ -4433,6 +4215,7 @@ static int io_read(struct io_kiocb *req, unsigned int issue_flags)
 			return -EAGAIN;
 		}
 
+		req->cqe.res = iov_iter_count(&s->iter);
 		/*
 		 * Now retry read with the IOCB_WAITQ parts set in the iocb. If
 		 * we get -EIOCBQUEUED, then we'll get a notification when the
@@ -4549,7 +4332,12 @@ done:
 copy_iov:
 		iov_iter_restore(&s->iter, &s->iter_state);
 		ret = io_setup_async_rw(req, iovec, s, false);
-		return ret ?: -EAGAIN;
+		if (!ret) {
+			if (kiocb->ki_flags & IOCB_WRITE)
+				kiocb_end_write(req);
+			return -EAGAIN;
+		}
+		return ret;
 	}
 out_free:
 	/* it's reportedly faster than delegating the null check to kfree() */
@@ -5091,6 +4879,10 @@ static int io_uring_cmd(struct io_kiocb *req, unsigned int issue_flags)
 	if (!req->file->f_op->uring_cmd)
 		return -EOPNOTSUPP;
 
+	ret = security_uring_cmd(ioucmd);
+	if (ret)
+		return ret;
+
 	if (ctx->flags & IORING_SETUP_SQE128)
 		issue_flags |= IO_URING_F_SQE128;
 	if (ctx->flags & IORING_SETUP_CQE32)
@@ -5270,7 +5062,8 @@ done:
 		req_set_fail(req);
 	__io_req_complete(req, issue_flags, ret, 0);
 	/* put file to avoid an attempt to IOPOLL the req */
-	io_put_file(req->file);
+	if (!(req->flags & REQ_F_FIXED_FILE))
+		io_put_file(req->file);
 	req->file = NULL;
 	return 0;
 }
@@ -5738,7 +5531,7 @@ static int io_provide_buffers(struct io_kiocb *req, unsigned int issue_flags)
 
 	bl = io_buffer_get_list(ctx, p->bgid);
 	if (unlikely(!bl)) {
-		bl = kzalloc(sizeof(*bl), GFP_KERNEL);
+		bl = kzalloc(sizeof(*bl), GFP_KERNEL_ACCOUNT);
 		if (!bl) {
 			ret = -ENOMEM;
 			goto err;
@@ -6057,10 +5850,13 @@ static int io_setup_async_msg(struct io_kiocb *req,
 	async_msg = req->async_data;
 	req->flags |= REQ_F_NEED_CLEANUP;
 	memcpy(async_msg, kmsg, sizeof(*kmsg));
-	async_msg->msg.msg_name = &async_msg->addr;
+	if (async_msg->msg.msg_name)
+		async_msg->msg.msg_name = &async_msg->addr;
 	/* if were using fast_iov, set it to the new one */
-	if (!async_msg->free_iov)
-		async_msg->msg.msg_iter.iov = async_msg->fast_iov;
+	if (!kmsg->free_iov) {
+		size_t fast_idx = kmsg->msg.msg_iter.iov - kmsg->fast_iov;
+		async_msg->msg.msg_iter.iov = &async_msg->fast_iov[fast_idx];
+	}
 
 	return -EAGAIN;
 }
@@ -8039,103 +7835,6 @@ static int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 	return 0;
 }
 
-static int io_req_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	switch (req->opcode) {
-	case IORING_OP_NOP:
-		return io_nop_prep(req, sqe);
-	case IORING_OP_READV:
-	case IORING_OP_READ_FIXED:
-	case IORING_OP_READ:
-	case IORING_OP_WRITEV:
-	case IORING_OP_WRITE_FIXED:
-	case IORING_OP_WRITE:
-		return io_prep_rw(req, sqe);
-	case IORING_OP_POLL_ADD:
-		return io_poll_add_prep(req, sqe);
-	case IORING_OP_POLL_REMOVE:
-		return io_poll_remove_prep(req, sqe);
-	case IORING_OP_FSYNC:
-		return io_fsync_prep(req, sqe);
-	case IORING_OP_SYNC_FILE_RANGE:
-		return io_sfr_prep(req, sqe);
-	case IORING_OP_SENDMSG:
-	case IORING_OP_SEND:
-		return io_sendmsg_prep(req, sqe);
-	case IORING_OP_RECVMSG:
-	case IORING_OP_RECV:
-		return io_recvmsg_prep(req, sqe);
-	case IORING_OP_CONNECT:
-		return io_connect_prep(req, sqe);
-	case IORING_OP_TIMEOUT:
-		return io_timeout_prep(req, sqe);
-	case IORING_OP_TIMEOUT_REMOVE:
-		return io_timeout_remove_prep(req, sqe);
-	case IORING_OP_ASYNC_CANCEL:
-		return io_async_cancel_prep(req, sqe);
-	case IORING_OP_LINK_TIMEOUT:
-		return io_link_timeout_prep(req, sqe);
-	case IORING_OP_ACCEPT:
-		return io_accept_prep(req, sqe);
-	case IORING_OP_FALLOCATE:
-		return io_fallocate_prep(req, sqe);
-	case IORING_OP_OPENAT:
-		return io_openat_prep(req, sqe);
-	case IORING_OP_CLOSE:
-		return io_close_prep(req, sqe);
-	case IORING_OP_FILES_UPDATE:
-		return io_files_update_prep(req, sqe);
-	case IORING_OP_STATX:
-		return io_statx_prep(req, sqe);
-	case IORING_OP_FADVISE:
-		return io_fadvise_prep(req, sqe);
-	case IORING_OP_MADVISE:
-		return io_madvise_prep(req, sqe);
-	case IORING_OP_OPENAT2:
-		return io_openat2_prep(req, sqe);
-	case IORING_OP_EPOLL_CTL:
-		return io_epoll_ctl_prep(req, sqe);
-	case IORING_OP_SPLICE:
-		return io_splice_prep(req, sqe);
-	case IORING_OP_PROVIDE_BUFFERS:
-		return io_provide_buffers_prep(req, sqe);
-	case IORING_OP_REMOVE_BUFFERS:
-		return io_remove_buffers_prep(req, sqe);
-	case IORING_OP_TEE:
-		return io_tee_prep(req, sqe);
-	case IORING_OP_SHUTDOWN:
-		return io_shutdown_prep(req, sqe);
-	case IORING_OP_RENAMEAT:
-		return io_renameat_prep(req, sqe);
-	case IORING_OP_UNLINKAT:
-		return io_unlinkat_prep(req, sqe);
-	case IORING_OP_MKDIRAT:
-		return io_mkdirat_prep(req, sqe);
-	case IORING_OP_SYMLINKAT:
-		return io_symlinkat_prep(req, sqe);
-	case IORING_OP_LINKAT:
-		return io_linkat_prep(req, sqe);
-	case IORING_OP_MSG_RING:
-		return io_msg_ring_prep(req, sqe);
-	case IORING_OP_FSETXATTR:
-		return io_fsetxattr_prep(req, sqe);
-	case IORING_OP_SETXATTR:
-		return io_setxattr_prep(req, sqe);
-	case IORING_OP_FGETXATTR:
-		return io_fgetxattr_prep(req, sqe);
-	case IORING_OP_GETXATTR:
-		return io_getxattr_prep(req, sqe);
-	case IORING_OP_SOCKET:
-		return io_socket_prep(req, sqe);
-	case IORING_OP_URING_CMD:
-		return io_uring_cmd_prep(req, sqe);
-	}
-
-	printk_once(KERN_WARNING "io_uring: unhandled opcode %d\n",
-			req->opcode);
-	return -EINVAL;
-}
-
 static int io_req_prep_async(struct io_kiocb *req)
 {
 	const struct io_op_def *def = &io_op_defs[req->opcode];
@@ -8164,9 +7863,10 @@ static int io_req_prep_async(struct io_kiocb *req)
 	case IORING_OP_URING_CMD:
 		return io_uring_cmd_prep_async(req);
 	}
-	printk_once(KERN_WARNING "io_uring: prep_async() bad opcode %d\n",
-		    req->opcode);
-	return -EFAULT;
+
+	printk_once(KERN_WARNING "io_uring: unhandled opcode %d\n",
+			req->opcode);
+	return -EINVAL;
 }
 
 static u32 io_get_sequence(struct io_kiocb *req)
@@ -8335,141 +8035,7 @@ static int io_issue_sqe(struct io_kiocb *req, unsigned int issue_flags)
 	if (!def->audit_skip)
 		audit_uring_entry(req->opcode);
 
-	switch (req->opcode) {
-	case IORING_OP_NOP:
-		ret = io_nop(req, issue_flags);
-		break;
-	case IORING_OP_READV:
-	case IORING_OP_READ_FIXED:
-	case IORING_OP_READ:
-		ret = io_read(req, issue_flags);
-		break;
-	case IORING_OP_WRITEV:
-	case IORING_OP_WRITE_FIXED:
-	case IORING_OP_WRITE:
-		ret = io_write(req, issue_flags);
-		break;
-	case IORING_OP_FSYNC:
-		ret = io_fsync(req, issue_flags);
-		break;
-	case IORING_OP_POLL_ADD:
-		ret = io_poll_add(req, issue_flags);
-		break;
-	case IORING_OP_POLL_REMOVE:
-		ret = io_poll_remove(req, issue_flags);
-		break;
-	case IORING_OP_SYNC_FILE_RANGE:
-		ret = io_sync_file_range(req, issue_flags);
-		break;
-	case IORING_OP_SENDMSG:
-		ret = io_sendmsg(req, issue_flags);
-		break;
-	case IORING_OP_SEND:
-		ret = io_send(req, issue_flags);
-		break;
-	case IORING_OP_RECVMSG:
-		ret = io_recvmsg(req, issue_flags);
-		break;
-	case IORING_OP_RECV:
-		ret = io_recv(req, issue_flags);
-		break;
-	case IORING_OP_TIMEOUT:
-		ret = io_timeout(req, issue_flags);
-		break;
-	case IORING_OP_TIMEOUT_REMOVE:
-		ret = io_timeout_remove(req, issue_flags);
-		break;
-	case IORING_OP_ACCEPT:
-		ret = io_accept(req, issue_flags);
-		break;
-	case IORING_OP_CONNECT:
-		ret = io_connect(req, issue_flags);
-		break;
-	case IORING_OP_ASYNC_CANCEL:
-		ret = io_async_cancel(req, issue_flags);
-		break;
-	case IORING_OP_FALLOCATE:
-		ret = io_fallocate(req, issue_flags);
-		break;
-	case IORING_OP_OPENAT:
-		ret = io_openat(req, issue_flags);
-		break;
-	case IORING_OP_CLOSE:
-		ret = io_close(req, issue_flags);
-		break;
-	case IORING_OP_FILES_UPDATE:
-		ret = io_files_update(req, issue_flags);
-		break;
-	case IORING_OP_STATX:
-		ret = io_statx(req, issue_flags);
-		break;
-	case IORING_OP_FADVISE:
-		ret = io_fadvise(req, issue_flags);
-		break;
-	case IORING_OP_MADVISE:
-		ret = io_madvise(req, issue_flags);
-		break;
-	case IORING_OP_OPENAT2:
-		ret = io_openat2(req, issue_flags);
-		break;
-	case IORING_OP_EPOLL_CTL:
-		ret = io_epoll_ctl(req, issue_flags);
-		break;
-	case IORING_OP_SPLICE:
-		ret = io_splice(req, issue_flags);
-		break;
-	case IORING_OP_PROVIDE_BUFFERS:
-		ret = io_provide_buffers(req, issue_flags);
-		break;
-	case IORING_OP_REMOVE_BUFFERS:
-		ret = io_remove_buffers(req, issue_flags);
-		break;
-	case IORING_OP_TEE:
-		ret = io_tee(req, issue_flags);
-		break;
-	case IORING_OP_SHUTDOWN:
-		ret = io_shutdown(req, issue_flags);
-		break;
-	case IORING_OP_RENAMEAT:
-		ret = io_renameat(req, issue_flags);
-		break;
-	case IORING_OP_UNLINKAT:
-		ret = io_unlinkat(req, issue_flags);
-		break;
-	case IORING_OP_MKDIRAT:
-		ret = io_mkdirat(req, issue_flags);
-		break;
-	case IORING_OP_SYMLINKAT:
-		ret = io_symlinkat(req, issue_flags);
-		break;
-	case IORING_OP_LINKAT:
-		ret = io_linkat(req, issue_flags);
-		break;
-	case IORING_OP_MSG_RING:
-		ret = io_msg_ring(req, issue_flags);
-		break;
-	case IORING_OP_FSETXATTR:
-		ret = io_fsetxattr(req, issue_flags);
-		break;
-	case IORING_OP_SETXATTR:
-		ret = io_setxattr(req, issue_flags);
-		break;
-	case IORING_OP_FGETXATTR:
-		ret = io_fgetxattr(req, issue_flags);
-		break;
-	case IORING_OP_GETXATTR:
-		ret = io_getxattr(req, issue_flags);
-		break;
-	case IORING_OP_SOCKET:
-		ret = io_socket(req, issue_flags);
-		break;
-	case IORING_OP_URING_CMD:
-		ret = io_uring_cmd(req, issue_flags);
-		break;
-	default:
-		ret = -EINVAL;
-		break;
-	}
+	ret = def->issue(req, issue_flags);
 
 	if (!def->audit_skip)
 		audit_uring_exit(!ret, ret);
@@ -8703,6 +8269,7 @@ static void io_queue_async(struct io_kiocb *req, int ret)
 
 	switch (io_arm_poll_handler(req, 0)) {
 	case IO_APOLL_READY:
+		io_kbuf_recycle(req, 0);
 		io_req_task_queue(req);
 		break;
 	case IO_APOLL_ABORTED:
@@ -8898,7 +8465,7 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 		req->flags |= REQ_F_CREDS;
 	}
 
-	return io_req_prep(req, sqe);
+	return def->prep(req, sqe);
 }
 
 static __cold int io_submit_fail_init(const struct io_uring_sqe *sqe,
@@ -9917,6 +9484,7 @@ static int io_scm_file_account(struct io_ring_ctx *ctx, struct file *file)
 
 		UNIXCB(skb).fp = fpl;
 		skb->sk = sk;
+		skb->scm_io_uring = 1;
 		skb->destructor = unix_destruct_scm;
 		refcount_add(skb->truesize, &sk->sk_wmem_alloc);
 	}
@@ -11143,12 +10711,6 @@ static void io_flush_apoll_cache(struct io_ring_ctx *ctx)
 static __cold void io_ring_ctx_free(struct io_ring_ctx *ctx)
 {
 	io_sq_thread_finish(ctx);
-
-	if (ctx->mm_account) {
-		mmdrop(ctx->mm_account);
-		ctx->mm_account = NULL;
-	}
-
 	io_rsrc_refs_drop(ctx);
 	/* __io_rsrc_put_work() may need uring_lock to progress, wait w/o it */
 	io_wait_rsrc_data(ctx->buf_data);
@@ -11187,6 +10749,10 @@ static __cold void io_ring_ctx_free(struct io_ring_ctx *ctx)
 #endif
 	WARN_ON_ONCE(!list_empty(&ctx->ltimeout_list));
 
+	if (ctx->mm_account) {
+		mmdrop(ctx->mm_account);
+		ctx->mm_account = NULL;
+	}
 	io_mem_free(ctx->rings);
 	io_mem_free(ctx->sq_sqes);
 
@@ -11388,6 +10954,9 @@ static __cold void io_ring_ctx_wait_and_kill(struct io_ring_ctx *ctx)
 		io_poll_remove_all(ctx, NULL, true);
 		/* if we failed setting up the ctx, we might not have any rings */
 		io_iopoll_try_reap_events(ctx);
+		/* drop cached put refs after potentially doing completions */
+		if (current->io_uring)
+			io_uring_drop_tctx_refs(current);
 	}
 
 	INIT_WORK(&ctx->exit_work, io_ring_exit_work);
@@ -13200,8 +12769,343 @@ out_fput:
 	return ret;
 }
 
+static int io_no_issue(struct io_kiocb *req, unsigned int issue_flags)
+{
+	WARN_ON_ONCE(1);
+	return -ECANCELED;
+}
+
+static const struct io_op_def io_op_defs[] = {
+	[IORING_OP_NOP] = {
+		.audit_skip		= 1,
+		.iopoll			= 1,
+		.prep			= io_nop_prep,
+		.issue			= io_nop,
+	},
+	[IORING_OP_READV] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.buffer_select		= 1,
+		.needs_async_setup	= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_read,
+	},
+	[IORING_OP_WRITEV] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.needs_async_setup	= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_write,
+	},
+	[IORING_OP_FSYNC] = {
+		.needs_file		= 1,
+		.audit_skip		= 1,
+		.prep			= io_fsync_prep,
+		.issue			= io_fsync,
+	},
+	[IORING_OP_READ_FIXED] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_read,
+	},
+	[IORING_OP_WRITE_FIXED] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_write,
+	},
+	[IORING_OP_POLL_ADD] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.audit_skip		= 1,
+		.prep			= io_poll_add_prep,
+		.issue			= io_poll_add,
+	},
+	[IORING_OP_POLL_REMOVE] = {
+		.audit_skip		= 1,
+		.prep			= io_poll_remove_prep,
+		.issue			= io_poll_remove,
+	},
+	[IORING_OP_SYNC_FILE_RANGE] = {
+		.needs_file		= 1,
+		.audit_skip		= 1,
+		.prep			= io_sfr_prep,
+		.issue			= io_sync_file_range,
+	},
+	[IORING_OP_SENDMSG] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.needs_async_setup	= 1,
+		.ioprio			= 1,
+		.async_size		= sizeof(struct io_async_msghdr),
+		.prep			= io_sendmsg_prep,
+		.issue			= io_sendmsg,
+	},
+	[IORING_OP_RECVMSG] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.buffer_select		= 1,
+		.needs_async_setup	= 1,
+		.ioprio			= 1,
+		.async_size		= sizeof(struct io_async_msghdr),
+		.prep			= io_recvmsg_prep,
+		.issue			= io_recvmsg,
+	},
+	[IORING_OP_TIMEOUT] = {
+		.audit_skip		= 1,
+		.async_size		= sizeof(struct io_timeout_data),
+		.prep			= io_timeout_prep,
+		.issue			= io_timeout,
+	},
+	[IORING_OP_TIMEOUT_REMOVE] = {
+		/* used by timeout updates' prep() */
+		.audit_skip		= 1,
+		.prep			= io_timeout_remove_prep,
+		.issue			= io_timeout_remove,
+	},
+	[IORING_OP_ACCEPT] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.poll_exclusive		= 1,
+		.ioprio			= 1,	/* used for flags */
+		.prep			= io_accept_prep,
+		.issue			= io_accept,
+	},
+	[IORING_OP_ASYNC_CANCEL] = {
+		.audit_skip		= 1,
+		.prep			= io_async_cancel_prep,
+		.issue			= io_async_cancel,
+	},
+	[IORING_OP_LINK_TIMEOUT] = {
+		.audit_skip		= 1,
+		.async_size		= sizeof(struct io_timeout_data),
+		.prep			= io_link_timeout_prep,
+		.issue			= io_no_issue,
+	},
+	[IORING_OP_CONNECT] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.needs_async_setup	= 1,
+		.async_size		= sizeof(struct io_async_connect),
+		.prep			= io_connect_prep,
+		.issue			= io_connect,
+	},
+	[IORING_OP_FALLOCATE] = {
+		.needs_file		= 1,
+		.prep			= io_fallocate_prep,
+		.issue			= io_fallocate,
+	},
+	[IORING_OP_OPENAT] = {
+		.prep			= io_openat_prep,
+		.issue			= io_openat,
+	},
+	[IORING_OP_CLOSE] = {
+		.prep			= io_close_prep,
+		.issue			= io_close,
+	},
+	[IORING_OP_FILES_UPDATE] = {
+		.audit_skip		= 1,
+		.iopoll			= 1,
+		.prep			= io_files_update_prep,
+		.issue			= io_files_update,
+	},
+	[IORING_OP_STATX] = {
+		.audit_skip		= 1,
+		.prep			= io_statx_prep,
+		.issue			= io_statx,
+	},
+	[IORING_OP_READ] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.buffer_select		= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_read,
+	},
+	[IORING_OP_WRITE] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_rw,
+		.issue			= io_write,
+	},
+	[IORING_OP_FADVISE] = {
+		.needs_file		= 1,
+		.audit_skip		= 1,
+		.prep			= io_fadvise_prep,
+		.issue			= io_fadvise,
+	},
+	[IORING_OP_MADVISE] = {
+		.prep			= io_madvise_prep,
+		.issue			= io_madvise,
+	},
+	[IORING_OP_SEND] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout		= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.prep			= io_sendmsg_prep,
+		.issue			= io_send,
+	},
+	[IORING_OP_RECV] = {
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollin			= 1,
+		.buffer_select		= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.prep			= io_recvmsg_prep,
+		.issue			= io_recv,
+	},
+	[IORING_OP_OPENAT2] = {
+		.prep			= io_openat2_prep,
+		.issue			= io_openat2,
+	},
+	[IORING_OP_EPOLL_CTL] = {
+		.unbound_nonreg_file	= 1,
+		.audit_skip		= 1,
+		.prep			= io_epoll_ctl_prep,
+		.issue			= io_epoll_ctl,
+	},
+	[IORING_OP_SPLICE] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.audit_skip		= 1,
+		.prep			= io_splice_prep,
+		.issue			= io_splice,
+	},
+	[IORING_OP_PROVIDE_BUFFERS] = {
+		.audit_skip		= 1,
+		.iopoll			= 1,
+		.prep			= io_provide_buffers_prep,
+		.issue			= io_provide_buffers,
+	},
+	[IORING_OP_REMOVE_BUFFERS] = {
+		.audit_skip		= 1,
+		.iopoll			= 1,
+		.prep			= io_remove_buffers_prep,
+		.issue			= io_remove_buffers,
+	},
+	[IORING_OP_TEE] = {
+		.needs_file		= 1,
+		.hash_reg_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.audit_skip		= 1,
+		.prep			= io_tee_prep,
+		.issue			= io_tee,
+	},
+	[IORING_OP_SHUTDOWN] = {
+		.needs_file		= 1,
+		.prep			= io_shutdown_prep,
+		.issue			= io_shutdown,
+	},
+	[IORING_OP_RENAMEAT] = {
+		.prep			= io_renameat_prep,
+		.issue			= io_renameat,
+	},
+	[IORING_OP_UNLINKAT] = {
+		.prep			= io_unlinkat_prep,
+		.issue			= io_unlinkat,
+	},
+	[IORING_OP_MKDIRAT] = {
+		.prep			= io_mkdirat_prep,
+		.issue			= io_mkdirat,
+	},
+	[IORING_OP_SYMLINKAT] = {
+		.prep			= io_symlinkat_prep,
+		.issue			= io_symlinkat,
+	},
+	[IORING_OP_LINKAT] = {
+		.prep			= io_linkat_prep,
+		.issue			= io_linkat,
+	},
+	[IORING_OP_MSG_RING] = {
+		.needs_file		= 1,
+		.iopoll			= 1,
+		.prep			= io_msg_ring_prep,
+		.issue			= io_msg_ring,
+	},
+	[IORING_OP_FSETXATTR] = {
+		.needs_file = 1,
+		.prep			= io_fsetxattr_prep,
+		.issue			= io_fsetxattr,
+	},
+	[IORING_OP_SETXATTR] = {
+		.prep			= io_setxattr_prep,
+		.issue			= io_setxattr,
+	},
+	[IORING_OP_FGETXATTR] = {
+		.needs_file = 1,
+		.prep			= io_fgetxattr_prep,
+		.issue			= io_fgetxattr,
+	},
+	[IORING_OP_GETXATTR] = {
+		.prep			= io_getxattr_prep,
+		.issue			= io_getxattr,
+	},
+	[IORING_OP_SOCKET] = {
+		.audit_skip		= 1,
+		.prep			= io_socket_prep,
+		.issue			= io_socket,
+	},
+	[IORING_OP_URING_CMD] = {
+		.needs_file		= 1,
+		.plug			= 1,
+		.needs_async_setup	= 1,
+		.async_size		= uring_cmd_pdu_size(1),
+		.prep			= io_uring_cmd_prep,
+		.issue			= io_uring_cmd,
+	},
+};
+
 static int __init io_uring_init(void)
 {
+	int i;
+
 #define __BUILD_BUG_VERIFY_ELEMENT(stype, eoffset, etype, ename) do { \
 	BUILD_BUG_ON(offsetof(stype, ename) != eoffset); \
 	BUILD_BUG_ON(sizeof(etype) != sizeof_field(stype, ename)); \
@@ -13265,6 +13169,11 @@ static int __init io_uring_init(void)
 	BUILD_BUG_ON(sizeof(atomic_t) != sizeof(u32));
 
 	BUILD_BUG_ON(sizeof(struct io_uring_cmd) > 64);
+
+	for (i = 0; i < ARRAY_SIZE(io_op_defs); i++) {
+		BUG_ON(!io_op_defs[i].prep);
+		BUG_ON(!io_op_defs[i].issue);
+	}
 
 	req_cachep = KMEM_CACHE(io_kiocb, SLAB_HWCACHE_ALIGN | SLAB_PANIC |
 				SLAB_ACCOUNT);

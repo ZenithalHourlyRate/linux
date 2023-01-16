@@ -649,12 +649,6 @@ static bool bpf_prog_kallsyms_candidate(const struct bpf_prog *fp)
 	return fp->jited && !bpf_prog_was_classic(fp);
 }
 
-static bool bpf_prog_kallsyms_verify_off(const struct bpf_prog *fp)
-{
-	return list_empty(&fp->aux->ksym.lnode) ||
-	       fp->aux->ksym.lnode.prev == LIST_POISON2;
-}
-
 void bpf_prog_kallsyms_add(struct bpf_prog *fp)
 {
 	if (!bpf_prog_kallsyms_candidate(fp) ||
@@ -828,6 +822,11 @@ struct bpf_prog_pack {
 	unsigned long bitmap[];
 };
 
+void bpf_jit_fill_hole_with_zero(void *area, unsigned int size)
+{
+	memset(area, 0, size);
+}
+
 #define BPF_PROG_SIZE_TO_NBITS(size)	(round_up(size, BPF_PROG_CHUNK_SIZE) / BPF_PROG_CHUNK_SIZE)
 
 static size_t bpf_prog_pack_size = -1;
@@ -898,7 +897,7 @@ static struct bpf_prog_pack *alloc_new_pack(bpf_jit_fill_hole_t bpf_fill_ill_ins
 	return pack;
 }
 
-static void *bpf_prog_pack_alloc(u32 size, bpf_jit_fill_hole_t bpf_fill_ill_insns)
+void *bpf_prog_pack_alloc(u32 size, bpf_jit_fill_hole_t bpf_fill_ill_insns)
 {
 	unsigned int nbits = BPF_PROG_SIZE_TO_NBITS(size);
 	struct bpf_prog_pack *pack;
@@ -942,7 +941,7 @@ out:
 	return ptr;
 }
 
-static void bpf_prog_pack_free(struct bpf_binary_header *hdr)
+void bpf_prog_pack_free(struct bpf_binary_header *hdr)
 {
 	struct bpf_prog_pack *pack = NULL, *tmp;
 	unsigned int nbits;
@@ -1011,7 +1010,7 @@ pure_initcall(bpf_jit_charge_init);
 
 int bpf_jit_charge_modmem(u32 size)
 {
-	if (atomic_long_add_return(size, &bpf_jit_current) > bpf_jit_limit) {
+	if (atomic_long_add_return(size, &bpf_jit_current) > READ_ONCE(bpf_jit_limit)) {
 		if (!bpf_capable()) {
 			atomic_long_sub(size, &bpf_jit_current);
 			return -EPERM;
@@ -1152,7 +1151,6 @@ int bpf_jit_binary_pack_finalize(struct bpf_prog *prog,
 		bpf_prog_pack_free(ro_header);
 		return PTR_ERR(ptr);
 	}
-	prog->aux->use_bpf_prog_pack = true;
 	return 0;
 }
 
@@ -1176,17 +1174,23 @@ void bpf_jit_binary_pack_free(struct bpf_binary_header *ro_header,
 	bpf_jit_uncharge_modmem(size);
 }
 
+struct bpf_binary_header *
+bpf_jit_binary_pack_hdr(const struct bpf_prog *fp)
+{
+	unsigned long real_start = (unsigned long)fp->bpf_func;
+	unsigned long addr;
+
+	addr = real_start & BPF_PROG_CHUNK_MASK;
+	return (void *)addr;
+}
+
 static inline struct bpf_binary_header *
 bpf_jit_binary_hdr(const struct bpf_prog *fp)
 {
 	unsigned long real_start = (unsigned long)fp->bpf_func;
 	unsigned long addr;
 
-	if (fp->aux->use_bpf_prog_pack)
-		addr = real_start & BPF_PROG_CHUNK_MASK;
-	else
-		addr = real_start & PAGE_MASK;
-
+	addr = real_start & PAGE_MASK;
 	return (void *)addr;
 }
 
@@ -1199,11 +1203,7 @@ void __weak bpf_jit_free(struct bpf_prog *fp)
 	if (fp->jited) {
 		struct bpf_binary_header *hdr = bpf_jit_binary_hdr(fp);
 
-		if (fp->aux->use_bpf_prog_pack)
-			bpf_jit_binary_pack_free(hdr, NULL /* rw_buffer */);
-		else
-			bpf_jit_binary_free(hdr);
-
+		bpf_jit_binary_free(hdr);
 		WARN_ON_ONCE(!bpf_prog_kallsyms_verify_off(fp));
 	}
 
@@ -2712,6 +2712,12 @@ bool __weak bpf_helper_changes_pkt_data(void *func)
  * them using insn_is_zext.
  */
 bool __weak bpf_jit_needs_zext(void)
+{
+	return false;
+}
+
+/* Return TRUE if the JIT backend supports mixing bpf2bpf and tailcalls. */
+bool __weak bpf_jit_supports_subprog_tailcalls(void)
 {
 	return false;
 }

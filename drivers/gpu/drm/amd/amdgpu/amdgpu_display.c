@@ -1070,6 +1070,7 @@ static int amdgpu_display_gem_fb_verify_and_init(struct drm_device *dev,
 		goto err;
 
 	ret = drm_framebuffer_init(dev, &rfb->base, &amdgpu_fb_funcs);
+
 	if (ret)
 		goto err;
 

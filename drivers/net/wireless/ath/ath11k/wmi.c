@@ -1700,7 +1700,7 @@ int ath11k_wmi_bcn_tmpl(struct ath11k *ar, u32 vdev_id,
 	cmd->vdev_id = vdev_id;
 	cmd->tim_ie_offset = offs->tim_offset;
 
-	if (vif->csa_active) {
+	if (vif->bss_conf.csa_active) {
 		cmd->csa_switch_count_offset = offs->cntdwn_counter_offs[0];
 		cmd->ext_csa_switch_count_offset = offs->cntdwn_counter_offs[1];
 	}
@@ -7476,7 +7476,7 @@ ath11k_wmi_process_csa_switch_count_event(struct ath11k_base *ab,
 			continue;
 		}
 
-		if (arvif->is_up && arvif->vif->csa_active)
+		if (arvif->is_up && arvif->vif->bss_conf.csa_active)
 			ieee80211_csa_finish(arvif->vif);
 	}
 	rcu_read_unlock();
@@ -9003,12 +9003,13 @@ int ath11k_wmi_sta_keepalive(struct ath11k *ar,
 	cmd->interval = arg->interval;
 	cmd->method = arg->method;
 
+	arp = (struct wmi_sta_keepalive_arp_resp *)(cmd + 1);
+	arp->tlv_header = FIELD_PREP(WMI_TLV_TAG,
+				     WMI_TAG_STA_KEEPALIVE_ARP_RESPONSE) |
+			 FIELD_PREP(WMI_TLV_LEN, sizeof(*arp) - TLV_HDR_SIZE);
+
 	if (arg->method == WMI_STA_KEEPALIVE_METHOD_UNSOLICITED_ARP_RESPONSE ||
 	    arg->method == WMI_STA_KEEPALIVE_METHOD_GRATUITOUS_ARP_REQUEST) {
-		arp = (struct wmi_sta_keepalive_arp_resp *)(cmd + 1);
-		arp->tlv_header = FIELD_PREP(WMI_TLV_TAG,
-					     WMI_TAG_STA_KEEPALVE_ARP_RESPONSE) |
-				 FIELD_PREP(WMI_TLV_LEN, sizeof(*arp) - TLV_HDR_SIZE);
 		arp->src_ip4_addr = arg->src_ip4_addr;
 		arp->dest_ip4_addr = arg->dest_ip4_addr;
 		ether_addr_copy(arp->dest_mac_addr.addr, arg->dest_mac_addr);

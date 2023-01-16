@@ -2074,7 +2074,8 @@ static enum link_training_result dp_perform_128b_132b_channel_eq_done_sequence(
 	uint32_t wait_time = 0;
 	union lane_align_status_updated dpcd_lane_status_updated = {0};
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = {0};
-	enum link_training_result status = LINK_TRAINING_SUCCESS;
+	enum dc_status status = DC_OK;
+	enum link_training_result result = LINK_TRAINING_SUCCESS;
 	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = {0};
 
 	/* Transmit 128b/132b_TPS1 over Main-Link */
@@ -2099,22 +2100,24 @@ static enum link_training_result dp_perform_128b_132b_channel_eq_done_sequence(
 			lt_settings->pattern_for_eq, DPRX);
 
 	/* poll for channel EQ done */
-	while (status == LINK_TRAINING_SUCCESS) {
+	while (result == LINK_TRAINING_SUCCESS) {
 		dp_wait_for_training_aux_rd_interval(link, aux_rd_interval);
 		wait_time += aux_rd_interval;
-		dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
+		status = dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
 				&dpcd_lane_status_updated, dpcd_lane_adjust, DPRX);
 		dp_decide_lane_settings(lt_settings, dpcd_lane_adjust,
 			lt_settings->hw_lane_settings, lt_settings->dpcd_lane_settings);
 		dpcd_128b_132b_get_aux_rd_interval(link, &aux_rd_interval);
-		if (dp_is_ch_eq_done(lt_settings->link_settings.lane_count,
+		if (status != DC_OK) {
+			result = LINK_TRAINING_ABORT;
+		} else if (dp_is_ch_eq_done(lt_settings->link_settings.lane_count,
 				dpcd_lane_status)) {
 			/* pass */
 			break;
 		} else if (loop_count >= lt_settings->eq_loop_count_limit) {
-			status = DP_128b_132b_MAX_LOOP_COUNT_REACHED;
+			result = DP_128b_132b_MAX_LOOP_COUNT_REACHED;
 		} else if (dpcd_lane_status_updated.bits.LT_FAILED_128b_132b) {
-			status = DP_128b_132b_LT_FAILED;
+			result = DP_128b_132b_LT_FAILED;
 		} else {
 			dp_set_hw_lane_settings(link, link_res, lt_settings, DPRX);
 			dpcd_set_lane_settings(link, lt_settings, DPRX);
@@ -2123,24 +2126,26 @@ static enum link_training_result dp_perform_128b_132b_channel_eq_done_sequence(
 	}
 
 	/* poll for EQ interlane align done */
-	while (status == LINK_TRAINING_SUCCESS) {
-		if (dpcd_lane_status_updated.bits.EQ_INTERLANE_ALIGN_DONE_128b_132b) {
+	while (result == LINK_TRAINING_SUCCESS) {
+		if (status != DC_OK) {
+			result = LINK_TRAINING_ABORT;
+		} else if (dpcd_lane_status_updated.bits.EQ_INTERLANE_ALIGN_DONE_128b_132b) {
 			/* pass */
 			break;
 		} else if (wait_time >= lt_settings->eq_wait_time_limit) {
-			status = DP_128b_132b_CHANNEL_EQ_DONE_TIMEOUT;
+			result = DP_128b_132b_CHANNEL_EQ_DONE_TIMEOUT;
 		} else if (dpcd_lane_status_updated.bits.LT_FAILED_128b_132b) {
-			status = DP_128b_132b_LT_FAILED;
+			result = DP_128b_132b_LT_FAILED;
 		} else {
 			dp_wait_for_training_aux_rd_interval(link,
 					lt_settings->eq_pattern_time);
 			wait_time += lt_settings->eq_pattern_time;
-			dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
+			status = dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
 					&dpcd_lane_status_updated, dpcd_lane_adjust, DPRX);
 		}
 	}
 
-	return status;
+	return result;
 }
 
 static enum link_training_result dp_perform_128b_132b_cds_done_sequence(
@@ -2149,7 +2154,8 @@ static enum link_training_result dp_perform_128b_132b_cds_done_sequence(
 		struct link_training_settings *lt_settings)
 {
 	/* Assumption: assume hardware has transmitted eq pattern */
-	enum link_training_result status = LINK_TRAINING_SUCCESS;
+	enum dc_status status = DC_OK;
+	enum link_training_result result = LINK_TRAINING_SUCCESS;
 	union lane_align_status_updated dpcd_lane_status_updated = {0};
 	union lane_status dpcd_lane_status[LANE_COUNT_DP_MAX] = {0};
 	union lane_adjust dpcd_lane_adjust[LANE_COUNT_DP_MAX] = { { {0} } };
@@ -2159,24 +2165,26 @@ static enum link_training_result dp_perform_128b_132b_cds_done_sequence(
 	dpcd_set_training_pattern(link, lt_settings->pattern_for_cds);
 
 	/* poll for CDS interlane align done and symbol lock */
-	while (status == LINK_TRAINING_SUCCESS) {
+	while (result  == LINK_TRAINING_SUCCESS) {
 		dp_wait_for_training_aux_rd_interval(link,
 				lt_settings->cds_pattern_time);
 		wait_time += lt_settings->cds_pattern_time;
-		dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
+		status = dp_get_lane_status_and_lane_adjust(link, lt_settings, dpcd_lane_status,
 						&dpcd_lane_status_updated, dpcd_lane_adjust, DPRX);
-		if (dp_is_symbol_locked(lt_settings->link_settings.lane_count, dpcd_lane_status) &&
+		if (status != DC_OK) {
+			result = LINK_TRAINING_ABORT;
+		} else if (dp_is_symbol_locked(lt_settings->link_settings.lane_count, dpcd_lane_status) &&
 				dpcd_lane_status_updated.bits.CDS_INTERLANE_ALIGN_DONE_128b_132b) {
 			/* pass */
 			break;
 		} else if (dpcd_lane_status_updated.bits.LT_FAILED_128b_132b) {
-			status = DP_128b_132b_LT_FAILED;
+			result = DP_128b_132b_LT_FAILED;
 		} else if (wait_time >= lt_settings->cds_wait_time_limit) {
-			status = DP_128b_132b_CDS_DONE_TIMEOUT;
+			result = DP_128b_132b_CDS_DONE_TIMEOUT;
 		}
 	}
 
-	return status;
+	return result;
 }
 
 static enum link_training_result dp_perform_8b_10b_link_training(
@@ -2849,8 +2857,14 @@ bool perform_link_training_with_retries(
 						skip_video_pattern);
 
 				/* Transmit idle pattern once training successful. */
-				if (status == LINK_TRAINING_SUCCESS && !is_link_bw_low)
+				if (status == LINK_TRAINING_SUCCESS && !is_link_bw_low) {
 					dp_set_hw_test_pattern(link, &pipe_ctx->link_res, DP_TEST_PATTERN_VIDEO_MODE, NULL, 0);
+					/* Update verified link settings to current one
+					 * Because DPIA LT might fallback to lower link setting.
+					 */
+					link->verified_link_cap.link_rate = link->cur_link_settings.link_rate;
+					link->verified_link_cap.lane_count = link->cur_link_settings.lane_count;
+				}
 			} else {
 				status = dc_link_dp_perform_link_training(link,
 						&pipe_ctx->link_res,
@@ -5203,6 +5217,14 @@ bool dp_retrieve_lttpr_cap(struct dc_link *link)
 				lttpr_dpcd_data[DP_PHY_REPEATER_128B132B_RATES -
 								DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV];
 
+		/* If this chip cap is set, at least one retimer must exist in the chain
+		 * Override count to 1 if we receive a known bad count (0 or an invalid value) */
+		if (link->chip_caps & EXT_DISPLAY_PATH_CAPS__DP_FIXED_VS_EN &&
+				(dp_convert_to_count(link->dpcd_caps.lttpr_caps.phy_repeater_cnt) == 0)) {
+			ASSERT(0);
+			link->dpcd_caps.lttpr_caps.phy_repeater_cnt = 0x80;
+		}
+
 		/* Attempt to train in LTTPR transparent mode if repeater count exceeds 8. */
 		is_lttpr_present = (link->dpcd_caps.lttpr_caps.max_lane_count > 0 &&
 				link->dpcd_caps.lttpr_caps.max_lane_count <= 4 &&
@@ -7099,7 +7121,8 @@ void dp_enable_link_phy(
 	unsigned int i;
 
 	if (link->connector_signal == SIGNAL_TYPE_EDP) {
-		link->dc->hwss.edp_power_control(link, true);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
 	}
 
@@ -7226,7 +7249,8 @@ void dp_disable_link_phy(struct dc_link *link, const struct link_resource *link_
 			link->dc->hwss.edp_backlight_control(link, false);
 		if (link_hwss->ext.disable_dp_link_output)
 			link_hwss->ext.disable_dp_link_output(link, link_res, signal);
-		link->dc->hwss.edp_power_control(link, false);
+		if (!link->dc->config.edp_no_power_sequencing)
+			link->dc->hwss.edp_power_control(link, false);
 	} else {
 		if (dmcu != NULL && dmcu->funcs->lock_phy)
 			dmcu->funcs->lock_phy(dmcu);
