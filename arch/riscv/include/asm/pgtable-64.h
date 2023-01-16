@@ -180,7 +180,11 @@ static inline unsigned long _pud_pfn(pud_t pud)
 
 static inline pmd_t *pud_pgtable(pud_t pud)
 {
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	return (pmd_t *)pfn_to_virt(__page_val_to_pfn(pud_val(pud) & _PAGE_CHG_MASK));
+#else
 	return (pmd_t *)pfn_to_virt(__page_val_to_pfn(pud_val(pud)));
+#endif
 }
 
 static inline struct page *pud_page(pud_t pud)

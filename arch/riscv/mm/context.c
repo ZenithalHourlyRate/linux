@@ -205,6 +205,7 @@ static void set_mm_noasid(struct mm_struct *mm)
 	local_flush_tlb_all();
 }
 
+#if 0
 static inline void set_mm(struct mm_struct *mm, unsigned int cpu)
 {
 	if (static_branch_unlikely(&use_asid_allocator))
@@ -212,7 +213,27 @@ static inline void set_mm(struct mm_struct *mm, unsigned int cpu)
 	else
 		set_mm_noasid(mm);
 }
-
+#else
+static inline void set_mm(struct mm_struct *prev,
+			  struct mm_struct *next, unsigned int cpu)
+{
+	/*
+	 * The mm_cpumask indicates which harts' TLBs contain the virtual
+	 * address mapping of the mm. Compared to noasid, using asid
+	 * can't guarantee that stale TLB entries are invalidated because
+	 * the asid mechanism wouldn't flush TLB for every switch_mm for
+	 * performance. So when using asid, keep all CPUs footmarks in
+	 * cpumask() until mm reset.
+	 */
+	cpumask_set_cpu(cpu, mm_cpumask(next));
+	if (static_branch_unlikely(&use_asid_allocator)) {
+		set_mm_asid(next, cpu);
+	} else {
+		cpumask_clear_cpu(cpu, mm_cpumask(prev));
+		set_mm_noasid(next);
+	}
+ }
+#endif
 static int __init asids_init(void)
 {
 	unsigned long old;
@@ -264,10 +285,18 @@ static int __init asids_init(void)
 }
 early_initcall(asids_init);
 #else
+#if 0
 static inline void set_mm(struct mm_struct *mm, unsigned int cpu)
 {
 	/* Nothing to do here when there is no MMU */
 }
+#else
+static inline void set_mm(struct mm_struct *prev,
+			  struct mm_struct *next, unsigned int cpu)
+{
+	/* Nothing to do here when there is no MMU */
+}
+#endif
 #endif
 
 /*
@@ -316,11 +345,13 @@ void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	 * routines in order to determine who should be flushed.
 	 */
 	cpu = smp_processor_id();
-
+#if 0
 	cpumask_clear_cpu(cpu, mm_cpumask(prev));
 	cpumask_set_cpu(cpu, mm_cpumask(next));
 
 	set_mm(next, cpu);
-
+#else
+	set_mm(prev, next, cpu);
+#endif
 	flush_icache_deferred(next, cpu);
 }

@@ -10,6 +10,9 @@
 #include <linux/sizes.h>
 #include <linux/pgtable.h>
 #include <asm/page.h>
+#ifdef CONFIG_HIGHMEM
+#include <asm/kmap_size.h>
+#endif
 
 #ifdef CONFIG_MMU
 /*
@@ -29,6 +32,11 @@ enum fixed_addresses {
 	FIX_TEXT_POKE1,
 	FIX_TEXT_POKE0,
 	FIX_EARLYCON_MEM_BASE,
+#ifdef CONFIG_HIGHMEM
+	FIX_KMAP_BEGIN,
+	/*assume NR_CPU==128, workaroud checkpatch.pl*/
+	FIX_KMAP_END = FIX_KMAP_BEGIN + (KM_MAX_IDX * 128) - 1,
+#endif
 
 	__end_of_permanent_fixed_addresses,
 	/*
@@ -39,7 +47,12 @@ enum fixed_addresses {
 #define FIX_BTMAPS_SLOTS	7
 #define TOTAL_FIX_BTMAPS	(NR_FIX_BTMAPS * FIX_BTMAPS_SLOTS)
 
+#ifdef CONFIG_HIGHMEM
+	FIX_BTMAP_END = __ALIGN_MASK(__end_of_permanent_fixed_addresses,
+				((PMD_SIZE / PAGE_SIZE) - 1)) + 1,
+#else
 	FIX_BTMAP_END = __end_of_permanent_fixed_addresses,
+#endif
 	FIX_BTMAP_BEGIN = FIX_BTMAP_END + TOTAL_FIX_BTMAPS - 1,
 
 	__end_of_fixed_addresses

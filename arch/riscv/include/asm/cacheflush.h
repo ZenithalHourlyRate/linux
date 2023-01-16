@@ -42,6 +42,11 @@ void flush_icache_mm(struct mm_struct *mm, bool local);
 
 #endif /* CONFIG_SMP */
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+void dma_wbinv_range(unsigned long start, unsigned long end);
+void dma_wb_range(unsigned long start, unsigned long end);
+#endif
+
 /*
  * Bits in sys_riscv_flush_icache()'s flags argument.
  */

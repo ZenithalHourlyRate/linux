@@ -87,12 +87,25 @@
 
 #define FIXADDR_TOP      PCI_IO_START
 #ifdef CONFIG_64BIT
+#ifdef CONFIG_HIGHMEM
+#define FIXADDR_PMD_NUM  20
+#define FIXADDR_SIZE     (PMD_SIZE * FIXADDR_PMD_NUM)
+#else
 #define FIXADDR_SIZE     PMD_SIZE
+#endif
 #else
 #define FIXADDR_SIZE     PGDIR_SIZE
 #endif
 #define FIXADDR_START    (FIXADDR_TOP - FIXADDR_SIZE)
 
+#endif
+
+#ifdef CONFIG_HIGHMEM
+#define PKMAP_BASE       ((FIXADDR_START - PMD_SIZE) & (PMD_MASK))
+#define LAST_PKMAP       (PMD_SIZE >> PAGE_SHIFT)
+#define LAST_PKMAP_MASK  (LAST_PKMAP - 1)
+#define PKMAP_NR(virt)   (((virt) - PKMAP_BASE) >> PAGE_SHIFT)
+#define PKMAP_ADDR(nr)   (PKMAP_BASE + ((nr) << PAGE_SHIFT))
 #endif
 
 #ifdef CONFIG_XIP_KERNEL
@@ -150,9 +163,20 @@ extern struct pt_alloc_ops pt_ops __initdata;
 #define USER_PTRS_PER_PGD   (TASK_SIZE / PGDIR_SIZE)
 
 /* Page protection bits */
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define _PAGE_BASE	(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_USER | \
+			_PAGE_PMA_THEAD)
+#else
 #define _PAGE_BASE	(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_USER)
+#endif
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define PAGE_NONE		__pgprot(_PAGE_PROT_NONE | _PAGE_READ | \
+					 _PAGE_PMA_THEAD)
+#else
 #define PAGE_NONE		__pgprot(_PAGE_PROT_NONE | _PAGE_READ)
+#endif
+
 #define PAGE_READ		__pgprot(_PAGE_BASE | _PAGE_READ)
 #define PAGE_WRITE		__pgprot(_PAGE_BASE | _PAGE_READ | _PAGE_WRITE)
 #define PAGE_EXEC		__pgprot(_PAGE_BASE | _PAGE_EXEC)
@@ -166,12 +190,22 @@ extern struct pt_alloc_ops pt_ops __initdata;
 #define PAGE_SHARED		PAGE_WRITE
 #define PAGE_SHARED_EXEC	PAGE_WRITE_EXEC
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define _PAGE_KERNEL		(_PAGE_READ \
+				| _PAGE_WRITE \
+				| _PAGE_PRESENT \
+				| _PAGE_ACCESSED \
+				| _PAGE_DIRTY \
+				| _PAGE_GLOBAL \
+				| _PAGE_PMA_THEAD)
+#else
 #define _PAGE_KERNEL		(_PAGE_READ \
 				| _PAGE_WRITE \
 				| _PAGE_PRESENT \
 				| _PAGE_ACCESSED \
 				| _PAGE_DIRTY \
 				| _PAGE_GLOBAL)
+#endif
 
 #define PAGE_KERNEL		__pgprot(_PAGE_KERNEL)
 #define PAGE_KERNEL_READ	__pgprot(_PAGE_KERNEL & ~_PAGE_WRITE)
@@ -181,7 +215,8 @@ extern struct pt_alloc_ops pt_ops __initdata;
 
 #define PAGE_TABLE		__pgprot(_PAGE_TABLE)
 
-#define _PAGE_IOREMAP	((_PAGE_KERNEL & ~_PAGE_MTMASK) | _PAGE_IO)
+#define _PAGE_IOREMAP		((_PAGE_KERNEL & ~_PAGE_MTMASK) | _PAGE_IO)
+
 #define PAGE_KERNEL_IO		__pgprot(_PAGE_IOREMAP)
 
 extern pgd_t swapper_pg_dir[];
@@ -261,17 +296,29 @@ static inline pgd_t pfn_pgd(unsigned long pfn, pgprot_t prot)
 
 static inline unsigned long _pgd_pfn(pgd_t pgd)
 {
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	return __page_val_to_pfn(pgd_val(pgd) & _PAGE_CHG_MASK);
+#else
 	return __page_val_to_pfn(pgd_val(pgd));
+#endif
 }
 
 static inline struct page *pmd_page(pmd_t pmd)
 {
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	return pfn_to_page(__page_val_to_pfn(pmd_val(pmd) & _PAGE_CHG_MASK));
+#else
 	return pfn_to_page(__page_val_to_pfn(pmd_val(pmd)));
+#endif
 }
 
 static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 {
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	return (unsigned long)pfn_to_virt(__page_val_to_pfn(pmd_val(pmd) & _PAGE_CHG_MASK));
+#else
 	return (unsigned long)pfn_to_virt(__page_val_to_pfn(pmd_val(pmd)));
+#endif
 }
 
 static inline pte_t pmd_pte(pmd_t pmd)
@@ -287,7 +334,11 @@ static inline pte_t pud_pte(pud_t pud)
 /* Yields the page frame number (PFN) of a page table entry */
 static inline unsigned long pte_pfn(pte_t pte)
 {
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	return __page_val_to_pfn(pte_val(pte) & _PAGE_CHG_MASK);
+#else
 	return __page_val_to_pfn(pte_val(pte));
+#endif
 }
 
 #define pte_page(x)     pfn_to_page(pte_pfn(x))
@@ -471,6 +522,9 @@ static inline void __set_pte_at(struct mm_struct *mm,
 		flush_icache_pte(pteval);
 
 	set_pte(ptep, pteval);
+#ifdef CONFIG_HIGHMEM
+	local_flush_tlb_page(addr);
+#endif
 }
 
 static inline void set_pte_at(struct mm_struct *mm,
@@ -572,6 +626,13 @@ static inline pgprot_t pgprot_writecombine(pgprot_t _prot)
 	return __pgprot(prot);
 }
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define __HAVE_PHYS_MEM_ACCESS_PROT
+struct file;
+extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
+				unsigned long size, pgprot_t vma_prot);
+#endif
+
 /*
  * THP functions
  */
@@ -590,7 +651,11 @@ static inline pmd_t pmd_mkinvalid(pmd_t pmd)
 	return __pmd(pmd_val(pmd) & ~(_PAGE_PRESENT|_PAGE_PROT_NONE));
 }
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define __pmd_to_phys(pmd)  (__page_val_to_pfn(pmd_val(pmd) & _PAGE_CHG_MASK) << PAGE_SHIFT)
+#else
 #define __pmd_to_phys(pmd)  (__page_val_to_pfn(pmd_val(pmd)) << PAGE_SHIFT)
+#endif
 
 static inline unsigned long pmd_pfn(pmd_t pmd)
 {

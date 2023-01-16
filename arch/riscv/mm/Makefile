@@ -14,6 +14,11 @@ obj-$(CONFIG_MMU) += fault.o pageattr.o
 obj-y += cacheflush.o
 obj-y += context.o
 
+ifeq ($(CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL),y)
+obj-y += dma-mapping.o
+obj-y += ioremap.o
+endif
+
 ifeq ($(CONFIG_MMU),y)
 obj-$(CONFIG_SMP) += tlbflush.o
 endif

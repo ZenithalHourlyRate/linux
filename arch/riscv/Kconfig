@@ -172,6 +172,20 @@ config KASAN_SHADOW_OFFSET
 	default 0xdfffffff00000000 if 64BIT
 	default 0xffffffff if 32BIT
 
+config FORCE_MAX_ZONEORDER
+	int "Maximum zone order"
+	default 13
+	help
+	  The kernel memory allocator divides physically contiguous memory
+	  blocks into "zones", where each zone is a power of two number of
+	  pages.  This option selects the largest power of two that the kernel
+	  keeps in the memory allocator.  If you need to allocate very large
+	  blocks of physically contiguous memory, then you may need to
+	  increase this value.
+
+	  This config option is actually maximum order plus one. For example,
+	  a value of 13 means that the largest free memory block is 2^12 pages.
+
 config ARCH_FLATMEM_ENABLE
 	def_bool !NUMA
 
@@ -284,10 +298,10 @@ config SMP
 	  If you don't know what to do here, say N.
 
 config NR_CPUS
-	int "Maximum number of CPUs (2-32)"
-	range 2 32
+	int "Maximum number of CPUs (2-128)"
+	range 2 128
 	depends on SMP
-	default "8"
+	default "64"
 
 config HOTPLUG_CPU
 	bool "Support for hot-pluggable CPUs"
@@ -308,6 +322,14 @@ config TUNE_GENERIC
 	bool "generic"
 
 endchoice
+
+config HIGHMEM
+	bool "High Memory Support"
+	depends on MMU
+	select KMAP_LOCAL
+	default n
+	help
+	  Enable high memory support on riscv64 which uses sv39.
 
 # Common NUMA Features
 config NUMA

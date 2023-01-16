@@ -80,4 +80,33 @@ config SOC_CANAAN_K210_DTB_SOURCE
 
 endif
 
+config SOC_SOPHGO
+	bool "Sophgo SoCs"
+	help
+	  This enables support for Sophgo SoC platform hardware.
+
+if SOC_SOPHGO
+
+config SOC_SOPHGO_MANGO
+	bool "Sophgo mango SoC"
+	depends on SOC_SOPHGO
+	select SIFIVE_PLIC
+	select ERRATA_THEAD
+	help
+	  This enables support for Sophgo mango SoC platform hardware.
+
+config  THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+	bool "T-Head non-coherency memory mode"
+	select ERRATA_THEAD_PBMT
+	select ARCH_HAS_DMA_PREP_COHERENT
+	select ARCH_HAS_SYNC_DMA_FOR_CPU
+	select ARCH_HAS_SYNC_DMA_FOR_DEVICE
+	select ARCH_HAS_DMA_WRITE_COMBINE
+	select DMA_DIRECT_REMAP
+	select GENERIC_ALLOCATOR
+	help
+	  This enables support for T-Head non-coherency memory mode.
+
+endif
+
 endmenu
