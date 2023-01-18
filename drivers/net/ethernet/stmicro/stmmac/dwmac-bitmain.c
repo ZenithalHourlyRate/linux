@@ -163,6 +163,9 @@ static int bm_dwmac_probe(struct platform_device *pdev)
 	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
 	struct bm_mac *bsp_priv = NULL;
+	struct phy_device *phydev = NULL;
+	struct stmmac_priv *priv = NULL;
+	struct net_device *ndev = NULL;
 	int ret;
 
 	pdev->dev.dma_mask = &bm_dma_mask;
@@ -211,6 +214,25 @@ static int bm_dwmac_probe(struct platform_device *pdev)
 
 	plat_dat->bsp_priv = bsp_priv;
 	plat_dat->exit = bm_dwmac_exit;
+
+	ndev = dev_get_drvdata(&pdev->dev);
+	priv = netdev_priv(ndev);
+	phydev = mdiobus_get_phy(priv->mii, 0);
+
+	/* set green LED0 active for transmit, yellow LED1 for link*/
+	ret = phy_write_paged(phydev, 0, 0x1f, 0xd04);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Can not select page 0xd04\n");
+	ret = phy_write_paged(phydev, 0xd04, 0x10, 0x617f);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Can not alter LED Configuration\n");
+	/* disable eee LED function */
+	ret = phy_write_paged(phydev, 0xd04, 0x11, 0x0);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Can not disable EEE Configuration\n");
+	ret = phy_write_paged(phydev, 0, 0x1f, 0);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Can not select page 0\n");
 
 	return 0;
 
