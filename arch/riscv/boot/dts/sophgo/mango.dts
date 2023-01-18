@@ -1080,7 +1080,6 @@
 				   <&div_clk GATE_CLK_PTP_REF_I_ETH0>,
 				   <&div_clk GATE_CLK_REF_ETH0>;
 
-			phy-reset-gpios = <&port0a 27 0>;
 			/* no hash filter and perfect filter support */
 			snps,multicast-filter-bins = <0>;
 			snps,perfect-filter-entries = <1>;
@@ -1094,6 +1093,18 @@
 			snps,mtl-tx-config = <&mtl_tx_setup>;
 
 			phy-mode = "rgmii-id";
+			phy-reset-gpios = <&port0a 27 0>;
+			phy-handle = <&phy0>;
+			mdio {
+				#address-cells = <0x1>;
+				#size-cells = <0x0>;
+				compatible = "snps,dwmac-mdio";
+				phy0: phy@0 {
+					compatible = "ethernet-phy-ieee802.3-c22";
+					device_type = "ethernet-phy";
+					reg = <0x0>;
+				};
+			};
 		};
 	};
 
