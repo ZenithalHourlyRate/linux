@@ -957,6 +957,54 @@
 			nr_resets = <RST_MAX_NUM>;
 		};
 
+		i2c0: i2c@7030005000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clock-names = "clk_gate_apb_i2c";
+			compatible = "snps,designware-i2c";
+			reg = <0x70 0x30005000 0x0 0x1000>;
+			interrupt-parent = <&intc>;
+			interrupts = <101>;
+			clock-frequency = <100000>;
+		};
+
+		i2c1: i2c@7030006000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clock-names = "clk_gate_apb_i2c";
+			compatible = "snps,designware-i2c";
+			reg = <0x70 0x30006000 0x0 0x1000>;
+			interrupt-parent = <&intc>;
+			interrupts = <102>;
+			clock-frequency = <100000>;
+		};
+
+		i2c2: i2c@7030007000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clock-names = "clk_gate_apb_i2c";
+			compatible = "snps,designware-i2c";
+			reg = <0x70 0x30007000 0x0 0x1000>;
+			interrupt-parent = <&intc>;
+			interrupts = <103>;
+			clock-frequency = <100000>;
+		};
+
+		i2c3: i2c@7030008000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clocks = <&div_clk GATE_CLK_APB_I2C>;
+			clock-names = "clk_gate_apb_i2c";
+			compatible = "snps,designware-i2c";
+			reg = <0x70 0x30008000 0x0 0x1000>;
+			interrupt-parent = <&intc>;
+			interrupts = <104>;
+			clock-frequency = <100000>;
+		};
+
 		gpio0: gpio@7030009000 {
 			compatible = "snps,dw-apb-gpio";
 			reg = <0x70 0x30009000 0x0 0x400>;
@@ -979,6 +1027,26 @@
 				interrupt-parent = <&intc>;
 				interrupts = <96>;
 			};
+		};
+
+		pwm: pwm@703000C000 {
+			compatible = "bitmain,bm-pwm";
+			reg = <0x70 0x3000C000 0x0 0x20>;
+			clocks = <&div_clk GATE_CLK_APB_PWM>;
+			clock-names = "clk_gate_apb_pwm";
+			#pwm-cells = <2>;
+			pwm-num = <2>;
+			no-polarity;
+		};
+
+		tach0: tach@703000C020 {
+			compatible = "bitmain,bm-tach";
+			reg = <0x70 0x3000C020 0x0 0x8>;
+		};
+
+		tach1: tach@703000C028 {
+			compatible = "bitmain,bm-tach";
+			reg = <0x70 0x3000C028 0x0 0x8>;
 		};
 
 		uart0: serial@7040000000 {
