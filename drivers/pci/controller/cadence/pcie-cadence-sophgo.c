@@ -15,10 +15,10 @@
 
 #include "pcie-cadence.h"
 
-#define MAX_MSI_IRQS			32
+#define MAX_MSI_IRQS			512
 #define MAX_MSI_IRQS_PER_CTRL		1
 #define MAX_MSI_CTRLS			(MAX_MSI_IRQS / MAX_MSI_IRQS_PER_CTRL)
-#define MSI_DEF_NUM_VECTORS		32
+#define MSI_DEF_NUM_VECTORS		512
 #define BYTE_NUM_PER_MSI_VEC		4
 
 // mango sideband signals
@@ -347,8 +347,8 @@ static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 	u64 msi_target = 0;
 	u32 value = 0;
 
-	// support 256 msi vectors
-	rc->msi_page = dma_alloc_coherent(dev, 1024, &rc->msi_data,
+	// support 512 msi vectors
+	rc->msi_page = dma_alloc_coherent(dev, 2048, &rc->msi_data,
 					  (GFP_KERNEL|GFP_DMA32|__GFP_ZERO));
 	if (rc->msi_page == NULL)
 		return -1;
@@ -361,7 +361,7 @@ static int cdns_pcie_msi_init(struct cdns_mango_pcie_rc *rc)
 	cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG0864), upper_32_bits(msi_target));
 
 	value = cdns_pcie_readl(pcie, (apb_base + CDNS_PCIE_IRS_REG085C));
-	value = (value & 0x0000ffff) | (10 << 16);
+	value = (value & 0x0000ffff) | (MAX_MSI_IRQS << 16);
 	cdns_pcie_writel(pcie, (apb_base + CDNS_PCIE_IRS_REG085C), value);
 
 	return 0;
