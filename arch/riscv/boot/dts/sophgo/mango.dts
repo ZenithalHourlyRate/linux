@@ -11,6 +11,7 @@
 	compatible = "sophgo, sg2040_mango_pld";
 	#address-cells = <2>;
 	#size-cells = <2>;
+	dma-noncoherent;
 
 	memory@0 {
 		device_type = "memory";
@@ -1133,7 +1134,7 @@
 		#size-cells = <2>;
 
 		bus-range = <0x80 0xff>;
-		linux,pci-domain = <0>;
+		linux,pci-domain = <1>;
 		cdns,max-outbound-regions = <16>;
 		cdns,no-bar-match-nbits = <48>;
 		vendor-id = /bits/ 16 <0x1E30>;
