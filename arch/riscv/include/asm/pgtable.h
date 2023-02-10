@@ -662,7 +662,11 @@ static inline unsigned long pmd_pfn(pmd_t pmd)
 	return ((__pmd_to_phys(pmd) & PMD_MASK) >> PAGE_SHIFT);
 }
 
+#ifdef CONFIG_THEAD_PATCH_NONCOHERENCY_MEMORY_MODEL
+#define __pud_to_phys(pud)  (__page_val_to_pfn(pud_val(pud) & _PAGE_CHG_MASK) << PAGE_SHIFT)
+#else
 #define __pud_to_phys(pud)  (__page_val_to_pfn(pud_val(pud)) << PAGE_SHIFT)
+#endif
 
 static inline unsigned long pud_pfn(pud_t pud)
 {
