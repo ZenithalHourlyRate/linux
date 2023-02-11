@@ -109,13 +109,18 @@ void dma_wb_range(unsigned long start, unsigned long end)
 	register unsigned long i asm("a0") = start & ~(L1_CACHE_BYTES - 1);
 
 	for (; i < end; i += L1_CACHE_BYTES) {
-		/* cpa is forbidden because ace2chi bridge doesn't support */
-		#if 0
-		asm volatile (".long 0x0295000b"); /* dcache.cpa a0 */
-		#else
 		asm volatile (".long 0x02b5000b"); /* dcache.cipa a0 */
-		#endif
 	}
+
+	sync_is();
+}
+
+void wbinv_va_range(unsigned long start, unsigned long end)
+{
+	register unsigned long i asm("a0") = start & ~(L1_CACHE_BYTES - 1);
+
+	for (; i < end; i += L1_CACHE_BYTES)
+		asm volatile (".long 0x0275000b"); /* dcache.civa a0 */
 
 	sync_is();
 }
