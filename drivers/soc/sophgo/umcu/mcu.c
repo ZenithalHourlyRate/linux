@@ -1101,9 +1101,9 @@ static int mcu_i2c_probe(struct i2c_client *i2c,
 	return -ENODEV;
 }
 
-static int mcu_i2c_remove(struct i2c_client *i2c)
+static void mcu_i2c_remove(struct i2c_client *i2c)
 {
-	return 0;
+	return;
 }
 
 static const struct of_device_id mcu_i2c_dt_table[] = {

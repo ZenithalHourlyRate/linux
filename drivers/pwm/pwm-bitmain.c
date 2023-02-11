@@ -152,6 +152,19 @@ static int pwm_bm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			      const struct pwm_state *state)
 {
 	int ret;
+	bool enabled = pwm->state.enabled;
+
+	if (state->polarity != pwm->state.polarity && pwm->state.enabled) {
+		pwm_bm_disable(chip, pwm);
+		enabled = false;
+	}
+
+	if (!state->enabled) {
+		if (enabled)
+			pwm_bm_disable(chip, pwm);
+
+		return 0;
+	}
 
 	ret = pwm_bm_config(chip, pwm, state->duty_cycle, state->period);
 	if (ret) {
@@ -159,25 +172,15 @@ static int pwm_bm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 		return ret;
 	}
 	dev_dbg(chip->dev, "%s tate->enabled =%d\n", __func__, state->enabled);
-	if (state->enabled)
+	if (!enabled)
 		ret = pwm_bm_enable(chip, pwm);
-	else
-		pwm_bm_disable(chip, pwm);
 
-	if (ret) {
-		dev_err(chip->dev, "pwm apply failed\n");
-		return ret;
-	}
 	return ret;
 }
 
 static const struct pwm_ops pwm_bm_ops = {
 	.request	= pwm_bm_request,
 	.free		= pwm_bm_free,
-	.enable		= pwm_bm_enable,
-	.disable	= pwm_bm_disable,
-	.config		= pwm_bm_config,
-	.set_polarity	= pwm_bm_set_polarity,
 	.apply		= pwm_bm_apply,
 	.owner		= THIS_MODULE,
 };
