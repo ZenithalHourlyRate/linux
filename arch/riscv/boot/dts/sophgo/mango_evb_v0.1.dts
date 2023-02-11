@@ -94,13 +94,6 @@
 			};
 
 		};
-
-		board {
-			polling-delay-passive = <5000>; /*milliseconds*/
-			polling-delay = <5000>; /* milliseconds */
-			thermal-sensors = <&mcu 1>;
-		};
-
 	};
 
 };
