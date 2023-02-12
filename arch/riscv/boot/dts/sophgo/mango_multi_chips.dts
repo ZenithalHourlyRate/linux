@@ -11,6 +11,7 @@
 	compatible = "sophgo, sg2040_mango_pld";
 	#address-cells = <2>;
 	#size-cells = <2>;
+	dma-noncoherent;
 
 	distance-map {
 		compatible = "numa-distance-map-v1";
