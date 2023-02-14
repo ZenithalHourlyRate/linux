@@ -18,6 +18,7 @@
 #include <asm/csr.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/sbi.h>
 
 #ifdef CONFIG_64BIT
 static unsigned long gstage_mode = (HGATP_MODE_SV39X4 << HGATP_MODE_SHIFT);
@@ -72,25 +73,13 @@ static int gstage_page_size_to_level(unsigned long page_size, u32 *out_level)
 	return -EINVAL;
 }
 
-static int gstage_level_to_page_order(u32 level, unsigned long *out_pgorder)
+static int gstage_level_to_page_size(u32 level, unsigned long *out_pgsize)
 {
 	if (gstage_pgd_levels < level)
 		return -EINVAL;
 
-	*out_pgorder = 12 + (level * gstage_index_bits);
-	return 0;
-}
+	*out_pgsize = 1UL << (12 + (level * gstage_index_bits));
 
-static int gstage_level_to_page_size(u32 level, unsigned long *out_pgsize)
-{
-	int rc;
-	unsigned long page_order = PAGE_SHIFT;
-
-	rc = gstage_level_to_page_order(level, &page_order);
-	if (rc)
-		return rc;
-
-	*out_pgsize = BIT(page_order);
 	return 0;
 }
 
@@ -125,13 +114,21 @@ static bool gstage_get_leaf_entry(struct kvm *kvm, gpa_t addr,
 
 static void gstage_remote_tlb_flush(struct kvm *kvm, u32 level, gpa_t addr)
 {
-	unsigned long order = PAGE_SHIFT;
+	unsigned long size = PAGE_SIZE;
+	struct kvm_vmid *vmid = &kvm->arch.vmid;
 
-	if (gstage_level_to_page_order(level, &order))
+	if (gstage_level_to_page_size(level, &size))
 		return;
-	addr &= ~(BIT(order) - 1);
+	addr &= ~(size - 1);
 
-	kvm_riscv_hfence_gvma_vmid_gpa(kvm, -1UL, 0, addr, BIT(order), order);
+	/*
+	 * TODO: Instead of cpu_online_mask, we should only target CPUs
+	 * where the Guest/VM is running.
+	 */
+	preempt_disable();
+	sbi_remote_hfence_gvma_vmid(cpu_online_mask, addr, size,
+				    READ_ONCE(vmid->vmid));
+	preempt_enable();
 }
 
 static int gstage_set_pte(struct kvm *kvm, u32 level,
