@@ -223,7 +223,7 @@
 		cpu@15 {
 			device_type = "cpu";
 			reg = <15>;
-			status = "failed";
+			status = "okay";
 			compatible = "riscv";
 			riscv,isa = "rv64imafdcv";
 			mmu-type = "riscv,sv39";
